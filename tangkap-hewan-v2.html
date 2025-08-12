@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>🎯 Tangkap Hewan — Game Anak (Offline)</title>
+  <style>
+    :root{
+      --bg:#f7fafc;
+      --fg:#111827;
+      --muted:#6b7280;
+      --brand:#22c55e; /* green */
+      --accent:#3b82f6; /* blue */
+      --danger:#ef4444;
+      --header-h: 112px; /* fallback, updated via JS */
+    }
+    *{box-sizing:border-box;}
+    html,body{height:100%;}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color:var(--fg);
+      background:linear-gradient(180deg,#ffffff 0%, var(--bg) 100%);
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    header{
+      position:sticky; top:0; z-index:20;
+      background:linear-gradient(180deg,#fefefe 0%,#f5f7fb 100%);
+      border-bottom:1px solid #e5e7eb;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .bar{
+      display:flex; align-items:center; gap:.75rem;
+      padding:.75rem .75rem .5rem .75rem;
+      flex-wrap:wrap;
+    }
+    .title{ font-weight:700; font-size:1.1rem; white-space:nowrap; }
+    .stats{ display:flex; gap:.5rem; align-items:center; font-size:.95rem; color:var(--muted); }
+    .stat-chip{ background:#eef2ff; color:#3730a3; border-radius:999px; padding:.2rem .6rem; font-weight:700; }
+    .target{
+      display:flex; align-items:center; gap:.5rem; margin-left:auto; font-size:1rem;
+      background:#ecfeff; color:#0e7490; border-radius:999px; padding:.25rem .6rem; border:1px solid #a5f3fc;
+    }
+    .target .emoji{ font-size:1.35rem; }
+
+    .controls{
+      display:flex; gap:.5rem; padding:.25rem .5rem .6rem .5rem; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    }
+    button, .pill{
+      appearance:none; border:1px solid #e5e7eb; background:#fff; color:#111827;
+      padding:.8rem .9rem; border-radius:14px; font-weight:700; font-size:.95rem; cursor:pointer;
+      box-shadow:0 1px 2px rgba(0,0,0,.04);
+      min-width:3.25rem;
+    }
+    button:active{ transform:translateY(1px); }
+    .primary{ background:var(--brand); color:white; border-color:#10b981; }
+    .ghost{ background:#f8fafc; }
+    .danger{ background:var(--danger); color:white; border-color:#dc2626; }
+    .accent{ background:var(--accent); color:white; border-color:#2563eb; }
+    .slider{
+      display:flex; align-items:center; gap:.5rem; padding:.45rem .65rem; background:#fff; border:1px solid #e5e7eb; border-radius:14px; font-weight:700;
+    }
+    .slider input{ width:110px; }
+    .slider label{ font-size:.85rem; color:#374151; }
+
+    #game{
+      position:relative; width:100%; height:calc(100dvh - var(--header-h));
+      touch-action: manipulation;
+    }
+    canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+    #confettiCanvas{ pointer-events:none; }
+
+    .hint{ font-size:.85rem; color:#6b7280; padding:.3rem .75rem .65rem; }
+    .hidden{ display:none !important; }
+
+    /* Larger touch target on mobile */
+    @media (max-width:480px){
+      .title{ font-size:1rem; }
+      .controls{ gap:.45rem; }
+      button, .pill{ padding:.72rem .8rem; font-size:.95rem; }
+      .slider input{ width:90px; }
+    }
+  </style>
+</head>
+<body>
+  <header id="header">
+    <div class="bar">
+      <div class="title">🐾 <span>Game Anak: Tangkap Hewan</span></div>
+      <div class="stats">
+        <span>Skor</span>
+        <span id="score" class="stat-chip">0</span>
+        <span>Streak</span>
+        <span id="streak" class="stat-chip">0</span>
+      </div>
+      <div class="target" id="targetBadge" title="Hewan yang harus ditangkap">
+        <span class="emoji" id="targetEmoji">❓</span>
+        <span id="targetName">Pilih Target</span>
+      </div>
+    </div>
+    <div class="controls" id="controls">
+      <button id="startPauseBtn" class="primary" aria-pressed="false">▶ Mulai</button>
+      <button id="repeatBtn" class="ghost" title="Ucapkan ulang petunjuk">🔁 Ulangi</button>
+      <button id="newTargetBtn" class="ghost" title="Pilih target hewan baru">🎯 Target Baru</button>
+      <div class="slider" title="Atur kecepatan jatuh & spawn">
+        <label for="speedRange">🏃 Kecepatan</label>
+        <input id="speedRange" type="range" min="1" max="5" step="1" value="2" />
+        <span id="speedVal" aria-live="polite">2</span>
+      </div>
+      <div class="slider" title="Atur volume suara & efek">
+        <label for="volumeRange">🔊 Volume</label>
+        <input id="volumeRange" type="range" min="0" max="1" step="0.01" value="0.8" />
+        <span id="volVal" aria-live="polite">80%</span>
+      </div>
+      <button id="downloadBtn" class="accent" title="Unduh game ini sebagai 1 file HTML">⬇️ Unduh</button>
+      <button id="shareBtn" class="ghost" title="Bagikan file HTML (jika didukung)">📤 Bagikan</button>
+      <button id="resetBtn" class="danger" title="Ulang permainan & skor">🗘 Ulang</button>
+    </div>
+    <div class="hint">Tips: Geser <b>kiri/kanan</b> di area permainan untuk <b>Target Baru</b>, geser <b>bawah</b> untuk <b>Jeda</b>. Sentuh hewan yang diminta ya!</div>
+  </header>
+
+  <main id="game" role="application" aria-label="Area permainan" tabindex="0">
+    <canvas id="playCanvas"></canvas>
+    <canvas id="confettiCanvas" aria-hidden="true"></canvas>
+  </main>
+
+  <script>
+  (function(){
+    'use strict';
+
+    // ======= DOM Refs =======
+    const header = document.getElementById('header');
+    const playCanvas = document.getElementById('playCanvas');
+    const confettiCanvas = document.getElementById('confettiCanvas');
+    const ctx = playCanvas.getContext('2d');
+    const cfx = confettiCanvas.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const streakEl = document.getElementById('streak');
+    const startPauseBtn = document.getElementById('startPauseBtn');
+    const repeatBtn = document.getElementById('repeatBtn');
+    const newTargetBtn = document.getElementById('newTargetBtn');
+    const speedRange = document.getElementById('speedRange');
+    const speedVal = document.getElementById('speedVal');
+    const volumeRange = document.getElementById('volumeRange');
+    const volVal = document.getElementById('volVal');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const targetEmojiEl = document.getElementById('targetEmoji');
+    const targetNameEl = document.getElementById('targetName');
+
+    // ======= Game State =======
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    let running = false;
+    let score = 0; let streak = 0;
+    let lastTime = 0;
+    let animalsOnScreen = [];
+    let spawnTicker = 0;
+    let target = null; // {emoji, name}
+
+    // Config
+    const ANIMAL_SET = [
+      {emoji:'🐱', name:'kucing'},
+      {emoji:'🐶', name:'anjing'},
+      {emoji:'🐰', name:'kelinci'},
+      {emoji:'🐻', name:'beruang'},
+      {emoji:'🐨', name:'koala'},
+      {emoji:'🐯', name:'harimau'},
+      {emoji:'🐸', name:'katak'},
+      {emoji:'🐵', name:'monyet'},
+      {emoji:'🐷', name:'babi'},
+      {emoji:'🐔', name:'ayam'},
+      {emoji:'🐦', name:'burung'},
+      {emoji:'🐮', name:'sapi'},
+      {emoji:'🐙', name:'gurita'},
+      {emoji:'🐠', name:'ikan'},
+      {emoji:'🐧', name:'pinguin'}
+    ];
+
+    const BASE_FALL_PX_PER_S = 120; // base fall speed
+    const BASE_SPAWN_MS = 900; // base spawn interval
+    const ANIMAL_SIZE = 48; // CSS pixel, scaled by DPR internally
+    const MAX_ANIMALS = 16;
+
+    // Dynamic controls
+    let speedFactor = Number(speedRange.value); // 1..5
+    let masterVolume = Number(volumeRange.value); // 0..1
+
+    // ======= Layout & Canvas =======
+    function updateHeaderHeightVar(){
+      const h = header.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--header-h', h + 'px');
+    }
+    function resizeCanvas(){
+      const rect = playCanvas.getBoundingClientRect();
+      playCanvas.width = Math.floor(rect.width * DPR);
+      playCanvas.height = Math.floor(rect.height * DPR);
+      confettiCanvas.width = playCanvas.width;
+      confettiCanvas.height = playCanvas.height;
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      cfx.setTransform(DPR,0,0,DPR,0,0);
+    }
+
+    // ======= Utilities =======
+    const rand = (min,max)=>Math.random()*(max-min)+min;
+    const choice = arr => arr[Math.floor(Math.random()*arr.length)];
+
+    function pickNewTarget(){
+      target = choice(ANIMAL_SET);
+      targetEmojiEl.textContent = target.emoji;
+      targetNameEl.textContent = target.name;
+      speak(`Tangkap ${target.name}.`);
+    }
+
+    function spawnAnimal(){
+      if(animalsOnScreen.length >= MAX_ANIMALS) return;
+      const t = choice(ANIMAL_SET);
+      const size = ANIMAL_SIZE; // CSS pixel
+      const x = rand(size*0.8, playCanvas.width/DPR - size*0.8);
+      const y = -size;
+      const fall = BASE_FALL_PX_PER_S * (0.7 + Math.random()*0.6) * speedFactor;
+      const spin = (Math.random() < 0.5 ? -1 : 1) * rand(0.001, 0.005);
+      animalsOnScreen.push({ ...t, x, y, vy: fall, size, rot: 0, spin });
+    }
+
+    function drawAnimals(dt){
+      ctx.clearRect(0,0,playCanvas.width/DPR, playCanvas.height/DPR);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for(let i=animalsOnScreen.length-1; i>=0; i--){
+        const a = animalsOnScreen[i];
+        a.y += (a.vy * dt);
+        a.rot += a.spin * (dt*16.67);
+        if(a.y - a.size/2 > playCanvas.height/DPR + 20){
+          animalsOnScreen.splice(i,1);
+          continue;
+        }
+        ctx.save();
+        ctx.translate(a.x, a.y);
+        ctx.rotate(a.rot);
+        ctx.font = `${a.size}px system-ui, "Apple Color Emoji", "Segoe UI Emoji"`;
+        ctx.fillText(a.emoji, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    function loop(ts){
+      if(!running){ lastTime = ts; return; }
+      const dt = Math.min(100, ts - lastTime) / 1000; // seconds
+      lastTime = ts;
+      spawnTicker += dt * 1000;
+      const spawnEvery = BASE_SPAWN_MS / speedFactor;
+      if(spawnTicker >= spawnEvery){
+        spawnTicker = 0;
+        spawnAnimal();
+      }
+      drawAnimals(dt);
+      requestAnimationFrame(loop);
+    }
+
+    // ======= Input Handling =======
+    function pointerToCanvasXY(evt){
+      const rect = playCanvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left);
+      const y = (evt.clientY - rect.top);
+      return {x,y};
+    }
+
+    function handleTap(x,y){
+      // find topmost animal under point
+      for(let i=animalsOnScreen.length-1;i>=0;i--){
+        const a = animalsOnScreen[i];
+        const half = a.size/2 + 6;
+        if(x >= a.x-half && x <= a.x+half && y >= a.y-half && y <= a.y+half){
+          // hit
+          animalsOnScreen.splice(i,1);
+          if(target && a.name === target.name){
+            score++; streak++;
+            updateStats();
+            sfxCorrect();
+            burstConfetti(x,y);
+            speak(choice(['Hebat!','Bagus sekali!','Mantap!']));
+            // pick a new target after a short delay
+            setTimeout(pickNewTarget, 400);
+          } else {
+            streak = 0; updateStats(); sfxWrong();
+          }
+          return;
+        }
+      }
+      // no hit short tap feedback
+      sfxTick();
+    }
+
+    playCanvas.addEventListener('pointerdown', (e)=>{
+      const p = pointerToCanvasXY(e);
+      handleTap(p.x, p.y);
+    });
+
+    // Simple gesture: swipe left/right -> new target; swipe down -> pause
+    (function setupGestures(){
+      let sx=0, sy=0, st=0;
+      const area = document.getElementById('game');
+      area.addEventListener('touchstart', (e)=>{ const t=e.changedTouches[0]; sx=t.clientX; sy=t.clientY; st=Date.now(); }, {passive:true});
+      area.addEventListener('touchend', (e)=>{
+        const t=e.changedTouches[0];
+        const dx=t.clientX - sx; const dy=t.clientY - sy; const dt=Date.now()-st;
+        if(dt<800){
+          if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)){
+            pickNewTarget();
+          } else if(dy>70){
+            toggleStartPause();
+          }
+        }
+      }, {passive:true});
+    })();
+
+    // ======= UI & Controls =======
+    function updateStats(){
+      scoreEl.textContent = String(score);
+      streakEl.textContent = String(streak);
+    }
+    function toggleStartPause(){
+      running = !running;
+      startPauseBtn.textContent = running ? '⏸ Jeda' : '▶ Mulai';
+      startPauseBtn.classList.toggle('primary', !running);
+      startPauseBtn.setAttribute('aria-pressed', running ? 'true' : 'false');
+      if(running){
+        if(!target) pickNewTarget();
+        requestAnimationFrame((ts)=>{ lastTime=ts; requestAnimationFrame(loop); });
+      }
+    }
+
+    startPauseBtn.addEventListener('click', toggleStartPause);
+    repeatBtn.addEventListener('click', ()=>{ if(target) speak(`Tangkap ${target.name}.`); });
+    newTargetBtn.addEventListener('click', pickNewTarget);
+    resetBtn.addEventListener('click', ()=>{
+      score=0; streak=0; updateStats(); animalsOnScreen.length=0; speak('Mulai lagi ya.');
+    });
+
+    speedRange.addEventListener('input', ()=>{
+      speedFactor = Number(speedRange.value);
+      speedVal.textContent = String(speedFactor);
+    });
+    volumeRange.addEventListener('input', ()=>{
+      masterVolume = Number(volumeRange.value);
+      volVal.textContent = Math.round(masterVolume*100)+'%';
+      if(ttsLastUtter){ ttsLastUtter.volume = masterVolume; }
+    });
+
+    // ======= Audio (WebAudio SFX) =======
+    let audioCtx = null, masterGain = null;
+    function ensureAudio(){
+      if(audioCtx) return;
+      try{
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = masterVolume;
+        masterGain.connect(audioCtx.destination);
+      }catch(e){ console.warn('AudioContext gagal dibuat:', e); }
+    }
+    function sfxTone(freq=440, durMs=120, type='sine', gain=0.3){
+      ensureAudio(); if(!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = type; osc.frequency.value = freq;
+      g.gain.value = gain; g.gain.setTargetAtTime(0, audioCtx.currentTime + durMs/1000, 0.05);
+      osc.connect(g).connect(masterGain);
+      osc.start(); osc.stop(audioCtx.currentTime + durMs/1000 + 0.1);
+    }
+    function sfxCorrect(){ sfxTone(880,120,'triangle',0.35); setTimeout(()=>sfxTone(1320,120,'triangle',0.3), 110); }
+    function sfxWrong(){ sfxTone(220,180,'square',0.3); }
+    function sfxTick(){ sfxTone(500,60,'sine',0.15); }
+
+    // ======= Confetti =======
+    let confettiParticles = [];
+    function burstConfetti(x,y){
+      const N = 120;
+      for(let i=0;i<N;i++){
+        confettiParticles.push({
+          x, y, vx: rand(-220,220), vy: rand(-120,-320), g: 540, life: rand(0.8,1.4), age:0, size: rand(3,6), rot:rand(0,6.28), vr: rand(-6,6)
+        });
+      }
+      animateConfetti();
+    }
+    let confettiAnimating = false; let lastConfettiTs=0;
+    function animateConfetti(ts){
+      if(!confettiAnimating){ confettiAnimating=true; lastConfettiTs=performance.now(); requestAnimationFrame(animateConfetti); return; }
+      const now = ts || performance.now();
+      const dt = Math.min(100, now - lastConfettiTs)/1000; lastConfettiTs=now;
+      cfx.clearRect(0,0,confettiCanvas.width/DPR, confettiCanvas.height/DPR);
+      cfx.save();
+      for(let i=confettiParticles.length-1;i>=0;i--){
+        const p = confettiParticles[i];
+        p.age += dt; if(p.age > p.life){ confettiParticles.splice(i,1); continue; }
+        p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+        cfx.save(); cfx.translate(p.x, p.y); cfx.rotate(p.rot);
+        cfx.fillStyle = `hsl(${(p.x+p.y)%360}, 80%, 60%)`;
+        cfx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+        cfx.restore();
+      }
+      cfx.restore();
+      if(confettiParticles.length>0){ requestAnimationFrame(animateConfetti); }
+      else { confettiAnimating=false; }
+    }
+
+    // ======= TTS (Speech Synthesis) =======
+    let ttsVoice = null; let ttsReady = false; let ttsLastUtter = null;
+    function selectIndonesianFemaleVoice(){
+      const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+      if(!voices || !voices.length) return null;
+      // Prefer Indonesian voices, then likely-female names
+      const idVoices = voices.filter(v => (v.lang||'').toLowerCase().startsWith('id'));
+      const likelyFemale = (v)=>(/female|woman|perempuan|cewe|siti|dea|dewi|anna|nami/i).test(v.name);
+      let pick = idVoices.find(likelyFemale) || idVoices[0];
+      // Fallback: any voice with id-ID in name
+      if(!pick) pick = voices.find(v=>/indones/i.test(v.name));
+      return pick || null;
+    }
+    function initTTS(){
+      if(!('speechSynthesis' in window)) { console.warn('SpeechSynthesis tidak tersedia.'); return; }
+      const assign = ()=>{ ttsVoice = selectIndonesianFemaleVoice(); ttsReady = true; };
+      speechSynthesis.onvoiceschanged = ()=>{ assign(); };
+      assign();
+    }
+    function speak(text){
+      if(!('speechSynthesis' in window)) return;
+      if(!ttsReady){ initTTS(); }
+      if(speechSynthesis.speaking){ speechSynthesis.cancel(); }
+      const u = new SpeechSynthesisUtterance(text);
+      ttsLastUtter = u;
+      u.lang = 'id-ID';
+      u.pitch = 1.1;
+      u.rate = 1.0;
+      u.volume = masterVolume;
+      if(ttsVoice) u.voice = ttsVoice;
+      try{ speechSynthesis.speak(u); }catch(e){ console.warn('TTS error:', e); }
+    }
+
+    // ======= Download & Share (Offline) =======
+    function currentHTML(){
+      // Serialize current document into a single HTML string
+      const clone = document.documentElement.cloneNode(true);
+      // Remove transient canvas drawings
+      const pc = clone.querySelector('#playCanvas'); if(pc) { const ctx=pc.getContext && pc.getContext('2d'); if(ctx) ctx.clearRect(0,0,pc.width,pc.height); }
+      const cc = clone.querySelector('#confettiCanvas'); if(cc) { const cfx=cc.getContext && cc.getContext('2d'); if(cfx) cfx.clearRect(0,0,cc.width,cc.height); }
+      return '<!doctype html>\n' + clone.outerHTML;
+    }
+    function downloadSelf(){
+      const blob = new Blob([currentHTML()], {type:'text/html'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'tangkap-hewan.html';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    }
+    async function shareSelf(){
+      try{
+        const blob = new Blob([currentHTML()], {type:'text/html'});
+        const file = new File([blob], 'tangkap-hewan.html', {type:'text/html'});
+        if(navigator.canShare && navigator.canShare({files:[file]})){
+          await navigator.share({ files:[file], title:'Game Anak: Tangkap Hewan', text:'Game HTML 1 file — bisa dimainkan offline.' });
+        } else {
+          // Fallback: trigger download, then hint user to share file dari galeri/dokumen
+          downloadSelf();
+          alert('Berbagi file langsung tidak didukung di perangkat ini. File telah diunduh — silakan bagikan dari aplikasi File.');
+        }
+      } catch(err){
+        console.warn('Share gagal:', err); alert('Gagal membagikan. Coba gunakan tombol Unduh.');
+      }
+    }
+    downloadBtn.addEventListener('click', downloadSelf);
+    shareBtn.addEventListener('click', shareSelf);
+
+    // ======= Init =======
+    function init(){
+      updateHeaderHeightVar();
+      resizeCanvas();
+      initTTS();
+      speedVal.textContent = String(speedFactor);
+      volVal.textContent = Math.round(masterVolume*100)+'%';
+      window.addEventListener('resize', ()=>{ updateHeaderHeightVar(); resizeCanvas(); });
+      // Ensure audio unlock on first user interaction
+      ['click','touchstart','pointerdown'].forEach(ev=>{
+        window.addEventListener(ev, ()=>{ ensureAudio(); }, {once:true, passive:true});
+      });
+      // Announce ready (non-blocking)
+      setTimeout(()=>{ speak('Halo! Tekan Mulai, lalu tangkap hewan yang disebutkan.'); }, 500);
+    }
+
+    // ======= Simple Console Tests =======
+    function runConsoleTests(){
+      console.log('%cMenjalankan tes sederhana…', 'color:#2563eb; font-weight:bold');
+      console.assert(Array.isArray(ANIMAL_SET) && ANIMAL_SET.length >= 10, 'ANIMAL_SET minimal 10 item');
+      const names = new Set(ANIMAL_SET.map(a=>a.name));
+      console.assert(names.has('kucing') && names.has('ikan'), 'Nama hewan kucing & ikan tersedia');
+      console.assert(typeof currentHTML()==='string' && currentHTML().includes('<html'), 'Serialisasi HTML berjalan');
+      const before = score; score++; console.assert(score === before+1, 'Skor bisa ditambah'); score = before;
+      const v = selectIndonesianFemaleVoice(); console.log('Voice terpilih:', v ? (v.name+' ('+v.lang+')') : 'tidak ada');
+      console.log('%cTes selesai.', 'color:#22c55e; font-weight:bold');
+    }
+
+    // export small debug helpers
+    window.GameDebug = {
+      spawn: spawnAnimal,
+      newTarget: pickNewTarget,
+      toggle: toggleStartPause,
+      speak,
+      reset: ()=>{score=0; streak=0; updateStats(); animalsOnScreen.length=0;},
+    };
+
+    // Boot
+    init();
+    runConsoleTests();
+
+  })();
+  </script>
+</body>
+</html>
